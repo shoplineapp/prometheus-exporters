@@ -1,0 +1,13 @@
+FROM seitk/beanstalkd_exporter:davidtannock as build
+
+WORKDIR /
+
+ARG BEANSTALKD_SERVER=""
+ARG BEANSTALKD_TUBES=""
+
+ENV BEANSTALKD_SERVER=$BEANSTALKD_SERVER
+ENV BEANSTALKD_TUBES=$BEANSTALKD_TUBES
+
+ENTRYPOINT []
+
+CMD /beanstalkd_exporter --beanstalkd.address=$BEANSTALKD_SERVER --beanstalkd.tubes=$BEANSTALKD_TUBES
