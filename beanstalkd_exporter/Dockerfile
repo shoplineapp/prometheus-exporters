@@ -1,13 +1,8 @@
-FROM seitk/beanstalkd_exporter:davidtannock as build
+FROM seitk/beanstalkd_exporter:davidtannock
 
 WORKDIR /
 
-ARG BEANSTALKD_SERVER=""
-ARG BEANSTALKD_TUBES=""
+COPY docker-entrypoint.sh .
 
-ENV BEANSTALKD_SERVER=$BEANSTALKD_SERVER
-ENV BEANSTALKD_TUBES=$BEANSTALKD_TUBES
-
-ENTRYPOINT []
-
-CMD /beanstalkd_exporter --beanstalkd.address=$BEANSTALKD_SERVER --beanstalkd.tubes=$BEANSTALKD_TUBES
+ENTRYPOINT ["/bin/sh"]
+CMD ["docker-entrypoint.sh"]
