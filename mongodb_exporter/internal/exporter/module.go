@@ -1,6 +1,8 @@
 package exporter
 
 import (
+	metrics "mongodb_performance_exporter/internal/exporter/metrics"
+
 	go_app "github.com/shoplineapp/go-app"
 	"github.com/shoplineapp/go-app/plugins/logger"
 )
@@ -10,6 +12,7 @@ type ExporterModule struct {
 
 	Crawler *Crawler
 	Metric  *Metric
+	Store   *Store
 }
 
 func (m *ExporterModule) Controllers() []interface{} {
@@ -28,6 +31,7 @@ func (m *ExporterModule) Provide() []interface{} {
 			return &ExporterModule{
 				Crawler: crawler,
 				Metric:  metric,
+				Store:   store,
 			}
 		},
 		NewParser,
@@ -35,5 +39,7 @@ func (m *ExporterModule) Provide() []interface{} {
 		NewStore,
 		NewMetric,
 		NewEventBus,
+		metrics.NewLogInfoMetric,
+		metrics.NewCollectionScanMetric,
 	}
 }

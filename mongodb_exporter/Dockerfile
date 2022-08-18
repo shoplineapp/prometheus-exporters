@@ -10,6 +10,7 @@ RUN go install github.com/cosmtrek/air@latest
 COPY go.mod go.sum ./
 RUN go mod download
 COPY ./cmd ./cmd
+COPY ./interfaces ./interfaces
 COPY ./internal ./internal
 RUN go build -o exporter ./cmd/exporter.go
 
