@@ -11,3 +11,9 @@ start: build
 
 build:
 	@go build -o exporter ./cmd/exporter.go
+
+version:
+	@git log -n 1 --pretty=format:"%H" | cut -c1-7
+
+build_prod:
+	docker build -t "shopline/mongodb-exporter:$(shell $(MAKE) version)" .

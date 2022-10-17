@@ -2,83 +2,66 @@ package exporter
 
 import (
 	"fmt"
+	"mongodb_performance_exporter/interfaces"
+	metrics "mongodb_performance_exporter/internal/exporter/metrics"
+	"os"
+	"sync"
 
 	"github.com/shoplineapp/go-app/plugins/env"
 	"github.com/shoplineapp/go-app/plugins/logger"
-	"github.com/sirupsen/logrus"
 )
 
 type Store struct {
-	env    *env.Env
-	logger *logger.Logger
-	events *Events
-
-	LogInfoQueries []LogInfoQuery
-	buffer         []LogInfoQuery
+	env              *env.Env
+	logger           *logger.Logger
+	events           *Events
+	metricProcessors []interfaces.MetricProcesser
 }
 
-type LogInfoQuery struct {
-	Cluster   string
-	Server    string
-	Namespace string
-	Operation string
-	Pattern   string
-	Count     int32
-	MinMS     float32
-	MaxMS     float32
-	P95MS     float32
-	SumMS     float32
-	MeanMS    float32
-}
-
-func (e LogInfoQuery) Labels() []string {
-	return []string{
-		e.Cluster,
-		e.Server,
-		e.Namespace,
-		e.Operation,
-		e.Pattern,
+func (s Store) InitMetrics() {
+	for _, metricProcessor := range s.metricProcessors {
+		metricProcessor := metricProcessor
+		metricProcessor.InitMetrics()
 	}
 }
 
-func (s *Store) OnLogEntriesReceived(cluster string, server string, entries []LogInfoQuery) {
-	s.logger.WithFields(logrus.Fields{"cluster": cluster, "server": server, "count": len(entries)}).Debug("Log entries saved into buffer")
-	s.buffer = append(s.buffer, entries...)
+func (s *Store) OnLogEntriesReceived(cluster string, server string, file *os.File) {
+	wg := &sync.WaitGroup{}
+	for _, metricProcessor := range s.metricProcessors {
+		metricProcessor := metricProcessor
+		wg.Add(1)
+		go func(metricProcessor interfaces.MetricProcesser, file *os.File) {
+			defer wg.Done()
+			metricProcessor.ParseFile(file, cluster, server)
+		}(metricProcessor, file)
+	}
+	wg.Wait()
 	s.events.Publish(fmt.Sprintf(EVENT_LOGS_ENTRIES_STORED_BY_SERVER, cluster, server))
 }
 
 func (s *Store) OnAllServersReceived() {
-	s.logger.WithFields(logrus.Fields{"buffer": len(s.buffer)}).Debug("Flushing buffer to store")
-	for _, entry := range s.LogInfoQueries {
-		MongoAtlasTopQueryCount.DeleteLabelValues(entry.Labels()...)
-		MongoAtlasTopQueryMinMS.DeleteLabelValues(entry.Labels()...)
-		MongoAtlasTopQueryMaxMS.DeleteLabelValues(entry.Labels()...)
-		MongoAtlasTopQueryP95MS.DeleteLabelValues(entry.Labels()...)
-		MongoAtlasTopQueryMeanMS.DeleteLabelValues(entry.Labels()...)
+	for _, metricProcessor := range s.metricProcessors {
+		metricProcessor := metricProcessor
+		metricProcessor.UpdateMetrics()
 	}
-
-	s.LogInfoQueries = s.buffer
-
-	s.logger.WithFields(logrus.Fields{"count": len(s.LogInfoQueries)}).Info("Reporting data to metric API")
-	for _, entry := range s.LogInfoQueries {
-		MongoAtlasTopQueryCount.WithLabelValues(entry.Labels()...).Set(float64(entry.Count))
-		MongoAtlasTopQueryMinMS.WithLabelValues(entry.Labels()...).Set(float64(entry.MinMS))
-		MongoAtlasTopQueryMaxMS.WithLabelValues(entry.Labels()...).Set(float64(entry.MaxMS))
-		MongoAtlasTopQueryP95MS.WithLabelValues(entry.Labels()...).Set(float64(entry.P95MS))
-		MongoAtlasTopQueryMeanMS.WithLabelValues(entry.Labels()...).Set(float64(entry.MeanMS))
-	}
-	s.buffer = []LogInfoQuery{}
 }
 
-func NewStore(env *env.Env, logger *logger.Logger, events *Events) *Store {
-	store := &Store{
-		env:            env,
-		logger:         logger,
-		events:         events,
-		LogInfoQueries: []LogInfoQuery{},
-		buffer:         []LogInfoQuery{},
+func NewStore(
+	env *env.Env,
+	logger *logger.Logger,
+	events *Events,
+	logInfoMetric *metrics.LogInfoMetric,
+	collectionScanMetric *metrics.CollectionScanMetric,
+) *Store {
+	s := &Store{
+		env:    env,
+		logger: logger,
+		events: events,
+		metricProcessors: []interfaces.MetricProcesser{
+			logInfoMetric,
+			collectionScanMetric,
+		},
 	}
-	store.events.SubscribeAsync(EVENT_LOGS_ENTRIES_PARSED, store.OnLogEntriesReceived, false)
-	store.events.SubscribeAsync(EVENT_LOGS_SERVERS_RECEIVED, store.OnAllServersReceived, false)
-	return store
+	s.events.SubscribeAsync(EVENT_LOGS_SERVERS_RECEIVED, s.OnAllServersReceived, false)
+	return s
 }

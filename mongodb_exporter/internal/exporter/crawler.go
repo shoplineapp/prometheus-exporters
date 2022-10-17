@@ -81,8 +81,6 @@ func (c *Crawler) DownloadLogs(cluster string, server string) {
 	} else {
 		logs := c.ReadGzippedData(data)
 		c.logger.WithFields(logrus.Fields{"length": len(logs)}).Info("Mongo logs updated")
-		// ioutil.WriteFile("output.txt", []byte(logs), 0644)
-
 		c.events.Publish(EVENT_LOGS_DOWNLOADED, cluster, server, logs)
 	}
 }
