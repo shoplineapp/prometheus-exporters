@@ -16,4 +16,4 @@ version:
 	@git log -n 1 --pretty=format:"%H" | cut -c1-7
 
 build_prod:
-	docker build -t "shopline/mongodb-exporter:$(shell $(MAKE) version)" .
+	docker build -t 332947256684.dkr.ecr.ap-southeast-1.amazonaws.com/mongodb-exporter:$(shell $(MAKE) version) --platform linux/amd64 .

@@ -125,19 +125,19 @@ func (m *LogInfoMetric) InitMetrics() {
 	m.logger.WithFields(logrus.Fields{"metric": "LogInfoMetric"}).Error("Metric initialized")
 }
 
-func (m *LogInfoMetric) ParseFile(file *os.File, cluster string, server string) {
+func (m *LogInfoMetric) ParseFile(legacyFile *os.File, originalFile *os.File, cluster string, server string) {
 	var out bytes.Buffer
 	var stderrr bytes.Buffer
 
 	// mtools disallow call from non-TTY context and throw an error with "this tool can't parse input from stdin"
 	// https://github.com/rueckstiess/mtools/issues/404
 	// Skipping cluster info and table headers
-	cmd := exec.Command("script", "-q", "-c", fmt.Sprintf("mloginfo --no-progressbar --queries %s | tail -n +15", file.Name()))
+	cmd := exec.Command("script", "-q", "-c", fmt.Sprintf("mloginfo --no-progressbar --queries %s | tail -n +15", legacyFile.Name()))
 	cmd.Stdout = &out
 	cmd.Stderr = &stderrr
 	err := cmd.Run()
 	if err != nil {
-		m.logger.WithFields(logrus.Fields{"metric": "LogInfoMetric", "cluster": cluster, "server": server, "error": err}).Error("Error parsing logs")
+		m.logger.WithFields(logrus.Fields{"metric": "LogInfoMetric", "cluster": cluster, "server": server, "error": err, "detail": stderrr.String()}).Error("Error parsing logs")
 	}
 
 	entries := []LogInfoQuery{}
@@ -173,13 +173,11 @@ func (m *LogInfoMetric) ParseFile(file *os.File, cluster string, server string) 
 func (m *LogInfoMetric) UpdateMetrics() {
 	m.logger.WithFields(logrus.Fields{"metric": "LogInfoMetric", "buffer": len(m.buffer)}).Debug("Flushing buffer to store")
 
-	for _, entry := range m.queries {
-		MongoAtlasTopQueryCount.DeleteLabelValues(entry.Labels()...)
-		MongoAtlasTopQueryMinMS.DeleteLabelValues(entry.Labels()...)
-		MongoAtlasTopQueryMaxMS.DeleteLabelValues(entry.Labels()...)
-		MongoAtlasTopQueryP95MS.DeleteLabelValues(entry.Labels()...)
-		MongoAtlasTopQueryMeanMS.DeleteLabelValues(entry.Labels()...)
-	}
+	MongoAtlasTopQueryCount.Reset()
+	MongoAtlasTopQueryMinMS.Reset()
+	MongoAtlasTopQueryMaxMS.Reset()
+	MongoAtlasTopQueryP95MS.Reset()
+	MongoAtlasTopQueryMeanMS.Reset()
 
 	m.queries = m.buffer
 

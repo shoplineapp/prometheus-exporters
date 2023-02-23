@@ -1,7 +1,8 @@
-FROM golang:1.18.3 AS builder
+FROM golang:1.20.1 AS builder
 WORKDIR /go/src
 
 RUN apt-get update && apt-get install -y \
+    git \
     curl \
     python3-pip \
     vim
@@ -12,14 +13,16 @@ RUN go mod download
 COPY ./cmd ./cmd
 COPY ./interfaces ./interfaces
 COPY ./internal ./internal
+COPY ./legacy ./legacy
 RUN go build -o exporter ./cmd/exporter.go
 
-FROM golang:1.18.3
+FROM golang:1.20.1
 WORKDIR /go/src
 
-RUN apt-get update && apt-get install -y python3-pip
+RUN apt-get update && apt-get install -y python3-pip git
 
-RUN pip3 install 'mtools[mloginfo]'
+# Use the forked version with support on aggregation pattern
+RUN pip3 install 'git+https://github.com/PrasannaSM/mtools.git@develop'
 RUN pip3 install python-dateutil
 RUN mkdir -p tmp/logs
 

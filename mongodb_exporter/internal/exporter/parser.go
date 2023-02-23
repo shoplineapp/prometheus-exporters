@@ -2,6 +2,7 @@ package exporter
 
 import (
 	"mongodb_performance_exporter/interfaces"
+	"mongodb_performance_exporter/legacy"
 	"os"
 
 	"github.com/shoplineapp/go-app/plugins/logger"
@@ -30,17 +31,30 @@ func (p *Parser) ParseLogs(cluster string, server string, logs string) {
 		return
 	}
 
-	f, fErr := os.CreateTemp("tmp/logs", "mongo-logs-")
+	// create a temporary file to store the logs
+	originalFile, fErr := os.CreateTemp("tmp/logs", "mongo-logs-")
 	if fErr != nil {
 		p.logger.WithFields(logrus.Fields{"cluster": cluster, "server": server, "error": fErr}).Error("Unable to create temporary file for logs")
 	}
-	f.WriteString(logs)
+	originalFile.WriteString(logs)
+
+	// convert to legacy format
+	legacyFile, fErr := os.CreateTemp("tmp/logs", "mongo-legacy-logs-")
+	if fErr != nil {
+		p.logger.WithFields(logrus.Fields{"cluster": cluster, "server": server, "error": fErr}).Error("Unable to create temporary file for legacy logs")
+	}
+
+	legacyFilePath := legacyFile.Name()
+	converter := &legacy.LogConverter{}
+	converter.ParseFile(originalFile.Name(), &legacyFilePath)
 
 	// close and remove the temporary file at the end of the program
-	defer f.Close()
-	defer os.Remove(f.Name())
+	defer legacyFile.Close()
+	defer originalFile.Close()
+	defer os.Remove(legacyFile.Name())
+	defer os.Remove(originalFile.Name())
 
-	p.store.OnLogEntriesReceived(cluster, server, f)
+	p.store.OnLogEntriesReceived(cluster, server, legacyFile, originalFile)
 }
 
 func NewParser(logger *logger.Logger, events *Events, store *Store) *Parser {

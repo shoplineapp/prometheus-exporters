@@ -8,7 +8,10 @@ require (
 	github.com/prometheus/client_golang v1.12.2
 	github.com/shoplineapp/go-app v0.0.0-20220620072935-6d16318a0673
 	github.com/sirupsen/logrus v1.8.1
+	github.com/spf13/cobra v1.6.1
+	github.com/valyala/fastjson v1.6.3
 	github.com/xinsnake/go-http-digest-auth-client v0.6.0
+	golang.org/x/exp v0.0.0-20221114191408-850992195362
 )
 
 require (
@@ -20,6 +23,7 @@ require (
 	github.com/go-playground/validator/v10 v10.10.0 // indirect
 	github.com/goccy/go-json v0.9.7 // indirect
 	github.com/golang/protobuf v1.5.2 // indirect
+	github.com/inconshreveable/mousetrap v1.0.1 // indirect
 	github.com/joho/godotenv v1.4.0 // indirect
 	github.com/joonix/log v0.0.0-20200409080653-9c1d2ceb5f1d // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
@@ -32,6 +36,7 @@ require (
 	github.com/prometheus/client_model v0.2.0 // indirect
 	github.com/prometheus/common v0.32.1 // indirect
 	github.com/prometheus/procfs v0.7.3 // indirect
+	github.com/spf13/pflag v1.0.5 // indirect
 	github.com/stretchr/testify v1.7.2 // indirect
 	github.com/ugorji/go/codec v1.2.7 // indirect
 	go.uber.org/atomic v1.6.0 // indirect
@@ -41,7 +46,7 @@ require (
 	go.uber.org/zap v1.16.0 // indirect
 	golang.org/x/crypto v0.0.0-20210711020723-a769d52b0f97 // indirect
 	golang.org/x/net v0.0.0-20210525063256-abc453219eb5 // indirect
-	golang.org/x/sys v0.0.0-20220114195835-da31bd327af9 // indirect
+	golang.org/x/sys v0.1.0 // indirect
 	golang.org/x/text v0.3.6 // indirect
 	google.golang.org/genproto v0.0.0-20200825200019-8632dd797987 // indirect
 	google.golang.org/protobuf v1.28.0 // indirect

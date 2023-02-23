@@ -25,15 +25,15 @@ func (s Store) InitMetrics() {
 	}
 }
 
-func (s *Store) OnLogEntriesReceived(cluster string, server string, file *os.File) {
+func (s *Store) OnLogEntriesReceived(cluster string, server string, legacyFile *os.File, originalFile *os.File) {
 	wg := &sync.WaitGroup{}
 	for _, metricProcessor := range s.metricProcessors {
 		metricProcessor := metricProcessor
 		wg.Add(1)
-		go func(metricProcessor interfaces.MetricProcesser, file *os.File) {
+		go func(metricProcessor interfaces.MetricProcesser, legacyFile *os.File, originalFile *os.File) {
 			defer wg.Done()
-			metricProcessor.ParseFile(file, cluster, server)
-		}(metricProcessor, file)
+			metricProcessor.ParseFile(legacyFile, originalFile, cluster, server)
+		}(metricProcessor, legacyFile, originalFile)
 	}
 	wg.Wait()
 	s.events.Publish(fmt.Sprintf(EVENT_LOGS_ENTRIES_STORED_BY_SERVER, cluster, server))

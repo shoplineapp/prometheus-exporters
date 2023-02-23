@@ -49,6 +49,7 @@ func (c *Crawler) DownloadLogs(cluster string, server string) {
 			err := r.(error)
 			c.logger.WithFields(logrus.Fields{"cluster": cluster, "server": server, "err": err}).Error("Failed to get logs from Mongo Atlas")
 			c.events.Publish(EVENT_LOGS_DOWNLOADED, cluster, server, "")
+			return
 		}
 	}()
 
@@ -75,6 +76,7 @@ func (c *Crawler) DownloadLogs(cluster string, server string) {
 	}
 
 	defer resp.Body.Close()
+
 	data, readErr := ioutil.ReadAll(resp.Body)
 	if readErr != nil {
 		c.logger.WithFields(logrus.Fields{"error": readErr}).Error("Unable to read response from Mongo Atlas")
