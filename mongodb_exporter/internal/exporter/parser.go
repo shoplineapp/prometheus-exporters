@@ -48,14 +48,13 @@ func (p *Parser) ParseLogs(cluster string, server string, logs string) {
 	converter := &legacy.LogConverter{}
 	converter.ParseFile(originalFile.Name(), &legacyFilePath)
 
-	//
 	// close and remove the temporary file at the end of the program
 	defer legacyFile.Close()
 	defer originalFile.Close()
 	defer os.Remove(legacyFile.Name())
 	defer os.Remove(originalFile.Name())
 
-	p.store.OnLogEntriesReceived(cluster, server, legacyFile)
+	p.store.OnLogEntriesReceived(cluster, server, legacyFile, originalFile)
 }
 
 func NewParser(logger *logger.Logger, events *Events, store *Store) *Parser {

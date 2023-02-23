@@ -2,15 +2,11 @@ package metrics
 
 import (
 	"bufio"
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"mongodb_performance_exporter/interfaces"
 	"os"
-	"os/exec"
 	"regexp"
-	"strconv"
-	"strings"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
@@ -28,16 +24,19 @@ type CollectionScanMetric struct {
 }
 
 type CollectionScanQuery struct {
-	Cluster      string
-	Server       string
-	Raw          string  `json:"line_str"`
-	Namespace    string  `json:"namespace"`
-	Operation    string  `json:"operation"`
-	NReturned    int32   `json:"nreturned"`
-	NScanned     int32   `json:"nscanned"`
-	NumYields    int32   `json:"numYields"`
-	Duration     float32 `json:"duration"`
-	DocsExamined int32
+	Cluster   string
+	Server    string
+	Raw       string
+	Namespace string
+	Operation string
+	Attr      struct {
+		DurationMillis int32                  `json:"durationMillis"`
+		DocsExamined   int32                  `json:"docsExamined"`
+		NumYields      int32                  `json:"numYields"`
+		NReturned      int32                  `json:"nreturned"`
+		Namespace      string                 `json:"ns"`
+		Command        map[string]interface{} `json:"command"`
+	}
 }
 
 type CollectionScanCounter struct {
@@ -49,6 +48,10 @@ type CollectionScanCounter struct {
 }
 
 var metricLabelNames = []string{"cluster", "server", "namespace", "operation", "raw"}
+
+var (
+	COMMAND_OPERATIONS = []string{"query", "getMore", "update", "remove", "count", "findAndModify", "geoNear", "find", "aggregate", "command"}
+)
 
 func (q CollectionScanQuery) Labels() []string {
 	return []string{
@@ -86,14 +89,6 @@ var (
 		metricLabelNames,
 	)
 
-	MongoAtlasCollectionScanNScanned = promauto.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Name: "mongo_atlas_collscan_queries_nscanned",
-			Help: "The nscanned count of collection scan queries from logs of mongodb atlas database",
-		},
-		metricLabelNames,
-	)
-
 	MongoAtlasCollectionScanDocsExaminated = promauto.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Name: "mongo_atlas_collscan_queries_docs_examinated",
@@ -107,44 +102,36 @@ func (m *CollectionScanMetric) InitMetrics() {
 	m.logger.Error("Metric initialized")
 }
 
-func (m *CollectionScanMetric) ParseFile(file *os.File, cluster string, server string) {
-	var out bytes.Buffer
-	var stderrr bytes.Buffer
-
-	// mtools disallow call from non-TTY context and throw an error with "this tool can't parse input from stdin"
-	// https://github.com/rueckstiess/mtools/issues/404
-	// Skipping cluster info and table headers
-	cmd := exec.Command("script", "-q", "-c", fmt.Sprintf("mlogfilter --planSummary COLLSCAN --json %s", file.Name()))
-	cmd.Stdout = &out
-	cmd.Stderr = &stderrr
-	err := cmd.Run()
+func (m *CollectionScanMetric) ParseFile(legacyFile *os.File, originalFile *os.File, cluster string, server string) {
+	f, err := os.Open(originalFile.Name())
 	if err != nil {
-		m.logger.WithFields(logrus.Fields{"cluster": cluster, "server": server, "error": err}).Error("Error parsing logs")
+		panic(err)
 	}
+	defer f.Close()
 
 	entries := []CollectionScanQuery{}
-
-	scanner := bufio.NewScanner(strings.NewReader(out.String()))
+	scanner := bufio.NewScanner(f)
 	for scanner.Scan() {
 		line := scanner.Text()
+		re, _ := regexp.Compile(`.+\"planSummary\":\"COLLSCAN\".+`)
+		match := re.FindStringSubmatch(line)
+		if len(match) == 0 {
+			continue
+		}
 
 		query := CollectionScanQuery{
 			Cluster: cluster,
 			Server:  server,
+			Raw:     line,
 		}
 		json.Unmarshal([]byte(line), &query)
 
-		if query.Duration <= 0 {
+		if query.Attr.DurationMillis <= 0 {
 			continue
 		}
+		query.Namespace = query.Attr.Namespace
+		query.Operation = m.GetOperation(query.Attr.Command)
 
-		// parse document examined count
-		re, _ := regexp.Compile(`docsExamined: *(\d+) *`)
-		match := re.FindStringSubmatch(query.Raw)
-		if len(match) >= 2 {
-			val, _ := strconv.Atoi(match[1])
-			query.DocsExamined = int32(val)
-		}
 		entries = append(entries, query)
 	}
 
@@ -155,26 +142,18 @@ func (m *CollectionScanMetric) ParseFile(file *os.File, cluster string, server s
 func (m *CollectionScanMetric) UpdateMetrics() {
 	m.logger.WithFields(logrus.Fields{"buffer": len(m.buffer)}).Debug("Flushing buffer to store")
 
-	for _, entry := range m.queries {
-		MongoAtlasCollectionScanDuration.DeleteLabelValues(entry.Labels()...)
-		MongoAtlasCollectionScanNScanned.DeleteLabelValues(entry.Labels()...)
-		MongoAtlasCollectionScanDocsExaminated.DeleteLabelValues(entry.Labels()...)
-		MongoAtlasCollectionScanCount.DeleteLabelValues(entry.Cluster, entry.Server, entry.Namespace, entry.Operation)
-	}
-
+	MongoAtlasCollectionScanDuration.Reset()
+	MongoAtlasCollectionScanDocsExaminated.Reset()
+	MongoAtlasCollectionScanCount.Reset()
 	m.queries = m.buffer
 
 	m.logger.WithFields(logrus.Fields{"count": len(m.queries)}).Info("Reporting data to metric API")
 	count := map[string]*CollectionScanCounter{}
 	for _, entry := range m.queries {
-		MongoAtlasCollectionScanDuration.WithLabelValues(entry.Labels()...).Set(float64(entry.Duration))
-		if entry.NScanned > 0 {
-			MongoAtlasCollectionScanNScanned.WithLabelValues(entry.Labels()...).Set(float64(entry.NScanned))
+		MongoAtlasCollectionScanDuration.WithLabelValues(entry.Labels()...).Set(float64(entry.Attr.DurationMillis))
+		if entry.Attr.DocsExamined > 0 {
+			MongoAtlasCollectionScanDocsExaminated.WithLabelValues(entry.Labels()...).Set(float64(entry.Attr.DocsExamined))
 		}
-		// if entry.DocsExamined > 0 {
-		MongoAtlasCollectionScanDocsExaminated.WithLabelValues(entry.Labels()...).Set(float64(entry.DocsExamined))
-		// }
-
 		key := fmt.Sprintf("%s.%s.%s.%s", entry.Cluster, entry.Server, entry.Namespace, entry.Operation)
 		if count[key] == nil {
 			count[key] = &CollectionScanCounter{
@@ -193,6 +172,15 @@ func (m *CollectionScanMetric) UpdateMetrics() {
 		MongoAtlasCollectionScanCount.WithLabelValues(counter.Labels()...).Set(float64(counter.Count))
 	}
 	m.buffer = []CollectionScanQuery{}
+}
+
+func (m *CollectionScanMetric) GetOperation(attr map[string]interface{}) string {
+	for _, cmd := range COMMAND_OPERATIONS {
+		if _, ok := attr[cmd]; ok {
+			return cmd
+		}
+	}
+	return ""
 }
 
 func NewCollectionScanMetric(logger *logger.Logger) *CollectionScanMetric {

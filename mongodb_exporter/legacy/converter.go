@@ -16,7 +16,6 @@ type LogConverter struct {
 }
 
 func (l *LogConverter) ParseFile(logFilePath string, destFilePath *string) {
-	fmt.Println("====== ParseFile??", logFilePath)
 	f, err := os.Open(logFilePath)
 	if err != nil {
 		panic(err)

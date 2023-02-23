@@ -11,6 +11,7 @@ import (
 var (
 	ANALYZABLE_OPERATIONS = []string{"query", "getmore", "command", "write", "update", "remove"}
 	ANALYZABLE_COMMANDS   = []string{"query", "getmore", "update", "remove", "count", "findandmodify", "geonear", "find", "aggregate", "command"}
+	UNQUOTABLE_KEYS       = []string{"filter", "aggregate", "filter", "pipeline", "distinct", "query"}
 )
 
 func (l *LogConverter) ParseRawObjectString(sb *strings.Builder, v *fastjson.Object, field string) {
@@ -51,16 +52,31 @@ func (l *LogConverter) ParseNumericField(sb *strings.Builder, v *fastjson.Object
 }
 
 func (l *LogConverter) ParseCommand(sb *strings.Builder, v *fastjson.Object) {
-	command := v.Get("command").GetObject()
+	fullCmd := v.Get("command").GetObject()
+	cmdKey := ""
+
 	sb.WriteString(" command: ")
 	for _, cmd := range ANALYZABLE_COMMANDS {
-		if string(command.Get(cmd).GetStringBytes()) != "" {
+		if string(fullCmd.Get(cmd).GetStringBytes()) != "" {
+			cmdKey = cmd
 			sb.WriteString(cmd)
 			break
 		}
 	}
 	sb.WriteString(" ")
 	cb := []byte{}
-	sb.WriteString(string(command.MarshalTo(cb)))
+
+	commandStr := string(fullCmd.MarshalTo(cb))
+
+	// mtools does not work with keys with quotes and it's greping the pattern like "filter: "
+	// We will remove the quotes and adding back trailing space after :
+	// https://github.com/rueckstiess/mtools/blob/develop/mtools/util/logevent.py#L515
+	if cmdKey != "" {
+		commandStr = strings.ReplaceAll(commandStr, "\""+cmdKey+"\":", " "+cmdKey+": ")
+		for _, key := range UNQUOTABLE_KEYS {
+			commandStr = strings.ReplaceAll(commandStr, "\""+key+"\":", " "+key+": ")
+		}
+	}
+	sb.WriteString(commandStr)
 	sb.WriteString(" ")
 }
